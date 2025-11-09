@@ -1,0 +1,3 @@
+[submodule "circuitpy_helpers"]
+	path = circuitpy_helpers
+	url = https://github.com/niccit/circuitpy_helpers.git
