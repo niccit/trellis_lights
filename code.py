@@ -12,7 +12,6 @@ import adafruit_logging
 import adafruit_connection_manager
 import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_minimqtt.adafruit_minimqtt import MMQTTException
-from adafruit_minimqtt.adafruit_minimqtt import MMQTTStateError
 from adafruit_led_animation.group import AnimationGroup
 from adafruit_led_animation.sequence import AnimationSequence
 from circuitpy_helpers.led_animations import animationBuilder
