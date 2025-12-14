@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MIT
 import gc
-
 import board
 import neopixel
 import json
@@ -14,12 +13,13 @@ import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_minimqtt.adafruit_minimqtt import MMQTTException
 from adafruit_led_animation.group import AnimationGroup
 from adafruit_led_animation.sequence import AnimationSequence
+from adafruit_led_animation import helper
 from circuitpy_helpers.led_animations import animationBuilder
+from circuitpy_helpers.color_helpers import getColors
 from circuitpy_helpers.file_helpers import updateFiles
 from circuitpy_helpers.led_animations import updateAnimationData
 from circuitpy_helpers.calendar_time_helpers import timeHelper
 from circuitpy_helpers.led_animations import controlLights
-from circuitpy_helpers.network_helpers import wanChecker
 
 # --- Logging --- #
 logger = adafruit_logging.getLogger("trellis_lights")
@@ -53,10 +53,12 @@ time_in_seconds = None
 sunset_in_seconds = None
 
 # --- Pixels Configuration --- #
-pixels_0 = neopixel.NeoPixel(board.SIG3, num_pixels, auto_write=False, pixel_order=neopixel.RGB)
+pixels_0 = neopixel.NeoPixel(board.SIG1, num_pixels, auto_write=False, pixel_order=neopixel.RGB)
 pixels_0.brightness = max_brightness
-pixels_1 = neopixel.NeoPixel(board.SIG2, num_pixels, auto_write=False, pixel_order=neopixel.RGB)
+pixels_1 = neopixel.NeoPixel(board.SIG3, num_pixels, auto_write=False, pixel_order=neopixel.RGB)
 pixels_1.brightness = max_brightness
+pixel0_subset = helper.PixelMap.vertical_lines(pixels_0, 20, 20, helper.vertical_strip_gridmap(20))
+pixel1_subset = helper.PixelMap.vertical_lines(pixels_1, 20, 20, helper.vertical_strip_gridmap(20))
 
 # --- MQTT Configuration --- #
 radio = wifi.radio
@@ -81,7 +83,7 @@ def on_connect(mqtt_client, userdata, flags, rc):
     logger.info(f"Connected to MQTT Broker {mqtt_client.broker}!")
     logger.debug(f"Flags: {flags}\n RC: {rc}")
     for topic in subscribe_list:
-        mqtt_client.subscribe(topic)
+        mqtt_client.subscribe(topic, qos=0)
 
 def on_disconnect(mqtt_client, userdata, rc):
     # This method is called when the mqtt_client disconnects
@@ -125,13 +127,19 @@ def on_message(client, topic, message):
         # since the name of the name/value pair is known, use this in the MQTT message
         # it will be transformed to the actual value in the data file before calling updater.update_data_file
         search_string = received_message["search_string"]
-        received_message['search_string'] = str(data[received_message["search_string"]])
-        logger.info(f"received message is {received_message}")
-        updated_message = json.dumps(received_message)
-        logger.info(f"updated message is {updated_message}")
-        updateFiles.update_data_file(updated_message, search_string)
-        time.sleep(1)
-        supervisor.reload()
+        mod_current_string = str(data[search_string]).strip("' [ ]")
+        mod_new_string = str(received_message["new_value"]).strip("' [ ]")
+        if mod_new_string not in mod_current_string:
+            received_message['search_string'] = str(data[received_message["search_string"]])
+            logger.info(f"received message is {received_message}")
+            updated_message = json.dumps(received_message)
+            logger.info(f"updated message is {updated_message}")
+            updateFiles.update_data_file(updated_message, search_string)
+            time.sleep(1)
+            supervisor.reload()
+        else:
+            logger.info(f"nothing has changed {mod_current_string} matches {mod_new_string}")
+
     if "motion" in topic:
         if "1" in message:
             updateFiles.backup_and_restore("/data.py", backup=True)
@@ -188,16 +196,16 @@ local_mqtt.on_publish = on_publish
 local_mqtt.on_message = on_message
 
 # Connect
-network_status = wanChecker.cpy_wan_active()
 # Only try to connect if WAN is accessible
-if network_status:
+try:
+    local_mqtt.connect()
+except adafruit_minimqtt.adafruit_minimqtt.MMQTTException:
+    logger.error("Failed to connect to MQTT broker, trying again")
     try:
         local_mqtt.connect()
     except adafruit_minimqtt.adafruit_minimqtt.MMQTTException:
-        logger.error("Failed to connect to MQTT broker")
-        pass
-else:
-    logger.error("Network not connected, did not try to connect to MQTT broker!")
+        logger.error("Failed on second attempt, reloading")
+        supervisor.reload()
 
 # -- Build chosen animation objects -- #
 chosen_animations = data["animations"]
@@ -216,7 +224,6 @@ with open("circuitpy_helpers/led_animations/animations.json", "r") as infile:
             item_with_overrides = updateAnimationData.override_default_settings(data, override_array, item)
             # Set the color choice
             updated_item = updateAnimationData.set_color(data, item_with_overrides)
-            logger.info(f"item to send is {updated_item}")
             obj_0 = animation_builder.build_animation(pixels_0, updated_item)
             obj_1 = animation_builder.build_animation(pixels_1, updated_item)
             animation_group.append(obj_0)
@@ -242,12 +249,15 @@ else:
 
 # --- Settings for Non-Blocking(ish) Hack provided by Mikey Sklar from Adafruit Forums! --- #
 FRAME_DELAY = 0.01    # 100 FPS (20 ms per frame)
-MQTT_POLL_EVERY = 100 # poll MQTT every 100 frames (~2 seconds at 50 FPS)
+MQTT_POLL_EVERY = 500 # poll MQTT about every 30 seconds (every 100 frames is about ~2 seconds at 50 FPS)
 frame_counter = 0
 
 # --- Main --- #
 logger.info(f"Trellis Lights starting up")
 while True:
+    gc.collect()
+    time.sleep(FRAME_DELAY)
+
     # start animations
     animations.animate()
 
@@ -258,27 +268,20 @@ while True:
     if frame_counter >= MQTT_POLL_EVERY:
         # check to see if we need to reset back to normal operations
         current_animation = data['animations']
+        logger.info(f"current animations is {current_animation}")
         if "motion_solid" in current_animation:
             logger.info(f"motions lights triggered, will wait {reset_wait} seconds, then reset lights")
             time.sleep(reset_wait)
             updateFiles.backup_and_restore("/data.py", restore=True)
 
-        # check WAN state
-        wan_state = wanChecker.cpy_wan_active()
-
         # if MQTT_POLL_EVERY criterion is met, loop mqtt for 1 second
         # Only attempt this if WAN is accessible:1
-        if wan_state:
-            try:
-                local_mqtt.loop(timeout=1)
-            except MMQTTException as e:
-                print("MQTT error:", e)
-                local_mqtt.disconnect()
-                # optional reconnect logic here
-                # We're using the on_disconnect method
-                pass
+        try:
+            local_mqtt.loop(timeout=1)
+        except MMQTTException as e:
+            print(f"MQTT error: {e}, reloading")
+            supervisor.reload()
 
         frame_counter = 0
 
     time.sleep(FRAME_DELAY)
-

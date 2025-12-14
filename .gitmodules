@@ -1,3 +1,6 @@
 [submodule "circuitpy_helpers"]
 	path = circuitpy_helpers
 	url = https://github.com/niccit/circuitpy_helpers.git
+[submodule "YAPP_Box"]
+	path = YAPP_Box
+	url = https://github.com/mrWheel/YAPP_Box.git
