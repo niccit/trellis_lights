@@ -22,12 +22,13 @@ def trellis_lighting_call(message):
     search_string = received_message["search_string"]
     mod_current_string = str(data[search_string]).strip("' [ ]")
     mod_new_string = str(received_message["new_value"]).strip("' [ ]")
-    if mod_new_string not in mod_current_string:
+    if mod_new_string is not mod_current_string:
         received_message['search_string'] = str(data[received_message["search_string"]])
         updated_message = json.dumps(received_message)
         updateFiles.update_data_file(updated_message, search_string)
         time.sleep(1)
-        supervisor.reload()
+        if "color" not in search_string:
+            supervisor.reload()
     del received_message, mod_current_string, mod_new_string
     gc.collect()
 

@@ -106,7 +106,12 @@ while True:
         try:
             local_mqtt.loop(timeout=1)
         except MMQTTException as e:
-            print(f"MQTT error: {e}, will try again next loop")
+            local_mqtt.reconnect()
+            local_mqtt.loop(timeout=1)
+            pass
+        except OSError as e:
+            local_mqtt.reconnect()
+            local_mqtt.loop(timeout=1)
             pass
         frame_counter = 0
     time.sleep(FRAME_DELAY)

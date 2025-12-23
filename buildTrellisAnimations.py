@@ -11,21 +11,19 @@ except ImportError:
 
 # Read in all animations from json file
 # And build the animation objects and append them to the array
+# Due to memory constraints on the Sparkle Motion, do not allow substitutions on speed, bounce, etc.
+# A custom animations.json is used to set the values for the size of the project
 def build_animations(pixels):
     import json
     import gc
     from circuitpy_helpers.led_animations import animationBuilder, updateAnimationData
     chosen_animations = data["animations"]
-    override_array = ["sparkles", "speed", "rate", "count", "period", "tail_length", "step", "reverse", "spacing",
-                      "size", "bounce"]
-    with open("circuitpy_helpers/led_animations/animations.json", "r") as infile:
+    with open("sparkle_motion_animations.json", "r") as infile:
         adata = json.load(infile)
         for item in adata['animations']:
             if item['name'] in chosen_animations:
-                # Check for any animation overrides and update the JSON object
-                item_with_overrides = updateAnimationData.override_default_settings(data, override_array, item)
                 # Set the color choice
-                updated_item = updateAnimationData.set_color(data, item_with_overrides)
+                updated_item = updateAnimationData.set_color(data, item)
                 obj = animationBuilder.build_animation(pixels, updated_item)
         del adata, updated_item
         infile.close()
