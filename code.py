@@ -23,7 +23,8 @@ except ImportError as e:
 pixels_0 = neopixel.NeoPixel(board.SIG1, data["num_pixels"], auto_write=False, pixel_order=neopixel.RGB, brightness=data["brightness_high"])
 pixels_1 = neopixel.NeoPixel(board.SIG3, data["num_pixels"], auto_write=False, pixel_order=neopixel.RGB, brightness=data["brightness_high"])
 # --- MQTT Configuration ---#
-subscribe_list = [os.getenv("mqtt_trellis_lights_feed"), os.getenv("mqtt_motion_detect_feed"), os.getenv("mqtt_sleep_feed")]
+subscribe_list = [os.getenv("mqtt_trellis_lights_feed"), os.getenv("mqtt_motion_detect_feed"), os.getenv("mqtt_sleep_feed"),
+                  os.getenv("mqtt_shutdown_feed")]
 pool = adafruit_connection_manager.get_radio_socketpool(wifi.radio)
 ssl_context = adafruit_connection_manager.get_radio_ssl_context(wifi.radio)
 local_mqtt = adafruit_minimqtt.adafruit_minimqtt.MQTT(
