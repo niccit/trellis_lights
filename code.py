@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: MIT
-import json
 import os
+import gc
 import time
 import wifi
 import board
 import neopixel
+import supervisor
 import adafruit_connection_manager
 import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_minimqtt.adafruit_minimqtt import MMQTTException
@@ -91,7 +92,7 @@ else:
 del animation_group
 # --- Settings for Non-Blocking(ish) Hack provided by Mikey Sklar from Adafruit Forums! --- #
 FRAME_DELAY = 0.01    # 100 FPS (20 ms per frame)
-MQTT_POLL_EVERY = 500 # poll MQTT about every 30 seconds (every 100 frames is about ~2 seconds at 50 FPS)
+MQTT_POLL_EVERY = 500 # poll MQTT about every 30 seconds (every 100 frames is ~2 seconds at 50 FPS)
 frame_counter = 0
 # --- Main --- #
 while True:
@@ -102,18 +103,18 @@ while True:
         if "motion_solid" in data['animations']:
             running_time = data['reset_lighting_timeout']
             updateFiles.backup_and_restore("/data.py", restore=True, sleep_time=running_time)
-            del current_animation
+            del running_time
         try:
             local_mqtt.loop(timeout=1)
         except MMQTTException as e:
-            local_mqtt.reconnect()
-            local_mqtt.loop(timeout=1)
-            pass
+            print(f"reloading, can't talk to MQTT: {e}")
+            supervisor.reload()
         except OSError as e:
-            local_mqtt.reconnect()
-            local_mqtt.loop(timeout=1)
-            pass
+            print(f"reloading, can't talk to MQTT: {e}")
+            supervisor.reload()
         frame_counter = 0
+        del current_animation
+        gc.collect()
     time.sleep(FRAME_DELAY)
 
 
